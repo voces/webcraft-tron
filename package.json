@@ -1,0 +1,20 @@
+{
+  "name": "webcraft-pong",
+  "version": "1.0.0",
+  "description": "",
+  "main": "index.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "author": "",
+  "license": "ISC",
+  "devDependencies": {
+    "eslint": "^3.19.0",
+    "eslint-config-mdcs": "^4.2.2",
+    "eslint-plugin-html": "^2.0.3"
+  },
+  "dependencies": {
+    "three": "^0.85.2",
+    "webcraft": "^1.0.4"
+  }
+}
