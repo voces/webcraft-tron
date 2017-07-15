@@ -9,9 +9,9 @@ class ArenaModel extends THREE.Mesh {
 
 		{
 
-			const subgeometry = new THREE.BoxGeometry( 26 * scale, scale, scale );
+			const subgeometry = new THREE.BoxGeometry( 41 * scale, scale, scale );
 			const wall = new THREE.Mesh( subgeometry );
-			wall.position.y = 7.5 * scale;
+			wall.position.y = 10 * scale;
 
 			geometry.mergeMesh( wall );
 
@@ -19,9 +19,29 @@ class ArenaModel extends THREE.Mesh {
 
 		{
 
-			const subgeometry = new THREE.BoxGeometry( 26 * scale, scale, scale );
+			const subgeometry = new THREE.BoxGeometry( 41 * scale, scale, scale );
 			const wall = new THREE.Mesh( subgeometry );
-			wall.position.y = - 7.5 * scale;
+			wall.position.y = - 10 * scale;
+
+			geometry.mergeMesh( wall );
+
+		}
+
+		{
+
+			const subgeometry = new THREE.BoxGeometry( scale, scale * 21, scale );
+			const wall = new THREE.Mesh( subgeometry );
+			wall.position.x = 21 * scale;
+
+			geometry.mergeMesh( wall );
+
+		}
+
+		{
+
+			const subgeometry = new THREE.BoxGeometry( scale, scale * 21, scale );
+			const wall = new THREE.Mesh( subgeometry );
+			wall.position.x = - 21 * scale;
 
 			geometry.mergeMesh( wall );
 

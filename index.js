@@ -30,8 +30,8 @@ const app = new WebCraft.App( {
 	types: {
 		doodads: [ { name: "Arena", model: "models/arena.js" } ],
 		units: [
-			{ name: "Ball", model: "models/sphere.js" },
-			{ name: "Paddle", model: "models/paddle.js" }
+			{ name: "Bike", model: "models/cube.js" },
+			{ name: "Wall", model: { path: "models/cube.js", opacity: 0.5 } }
 		]
 	},
 
@@ -42,9 +42,12 @@ const app = new WebCraft.App( {
 			if ( keyboard[ e.key ] ) return;
 			keyboard[ e.key ] = true;
 
-			if ( leftPaddle.owner !== app.localPlayer && rightPaddle.owner !== app.localPlayer ) return;
+			if ( ! app.localPlayer.bike ) return;
 
-			const eventType = e.key === "ArrowUp" && "up" || e.key === "ArrowDown" && "down";
+			const eventType = e.key === "ArrowUp" && "up" ||
+				e.key === "ArrowDown" && "down" ||
+				e.key === "ArrowLeft" && "left" ||
+				e.key === "ArrowRight" && "right";
 
 			if ( ! eventType ) return;
 
@@ -57,11 +60,6 @@ const app = new WebCraft.App( {
 			if ( ! keyboard[ e.key ] ) return;
 			keyboard[ e.key ] = false;
 
-			if ( leftPaddle.owner !== app.localPlayer && rightPaddle.owner !== app.localPlayer ) return;
-
-			if ( ! keyboard.ArrowUp && ! keyboard.ArrowDown && [ "ArrowUp", "ArrowDown" ].indexOf( e.key ) >= 0 )
-				app.network.send( { type: "hold" } );
-
 		}
 
 	}
@@ -70,18 +68,8 @@ const app = new WebCraft.App( {
 
 new app.Arena();
 
-const ball = new app.Ball();
-
-const leftPaddle = new app.Paddle( { x: - 12.5 } );
-const rightPaddle = new app.Paddle( { x: 12.5 } );
-
-const bounceRegion = new app.Rect( { x: 11.5, y: 6.5 }, { x: - 11.5, y: - 6.5 } );
-const scoreRegion = new app.Rect( { x: 13.5, y: 100 }, { x: - 13.5, y: - 100 } );
-
 app.state = {
-	players: app.players,
-	leftPaddle, rightPaddle, ball,
-	leftScore: 0, rightScore: 0
+	players: app.players
 };
 
 Object.defineProperty( app.state, "start", {
@@ -90,20 +78,23 @@ Object.defineProperty( app.state, "start", {
 	enumerable: true
 } );
 
+const spawnLocations = [
+	{ x: - 15, y: 6, facing: 0, speed: 10 },
+	{ x: 15, y: 6, facing: Math.PI, speed: 10 },
+	{ x: - 15, y: 2, facing: 0, speed: 10 },
+	{ x: 15, y: 2, facing: Math.PI, speed: 10 },
+	{ x: - 15, y: - 2, facing: 0, speed: 10 },
+	{ x: 15, y: - 2, facing: Math.PI, speed: 10 },
+	{ x: - 15, y: - 6, facing: 0, speed: 10 },
+	{ x: 15, y: - 6, facing: Math.PI, speed: 10 }
+];
+
+let tick;
 let startTimeout;
 
 /////////////////////////////////////////////////
 ///// Game Logic
 /////////////////////////////////////////////////
-
-function randomAngle() {
-
-	const random = ( app.random() - 0.5 ) * ( app.random() - 0.5 ) * 2,
-		dir = parseInt( random.toString()[ 15 ] ) % 2;
-
-	return dir ? random : random + Math.PI;
-
-}
 
 function reset() {
 
@@ -115,82 +106,66 @@ function reset() {
 
 function init() {
 
-	leftPaddle.owner = app.players[ 0 ];
-	rightPaddle.owner = app.players[ 1 ];
+	// leftPaddle.owner = app.players[ 0 ];
+	// rightPaddle.owner = app.players[ 1 ];
 
 }
 
 function start() {
 
-	const facing = randomAngle();
+	for ( let i = 0; i < 8 && i < app.players.length; i ++ ) {
 
-	ball.facing = facing;
-	ball.x = app.linearTween( { start: 0, rate: 10 * Math.cos( facing ), duration: Infinity } );
-	ball.y = app.linearTween( { start: 0, rate: 10 * Math.sin( facing ), duration: Infinity } );
+		const bike = new app.Bike( Object.assign( { owner: app.players[ i ] }, spawnLocations[ i ] ) );
+		app.players[ i ].bike = bike;
 
-	leftPaddle.y = 0;
-	rightPaddle.y = 0;
+		bike.x = app.linearTween( { start: bike.x, rate: bike.speed * Math.cos( bike.facing ), duration: Infinity } );
+
+		bike.oldFacing = bike.facing;
+
+	}
+
+	tickFunc();
+	tick = app.setInterval( tickFunc, 100 );
 
 }
 
-function angleWeightedAverage( angles, weights ) {
+function tickFunc() {
 
-	let x = 0;
-	let y = 0;
+	for ( let i = 0; i < app.players.length && i < 8; i ++ ) {
 
-	for ( let i = 0; i < angles.length; i ++ ) {
+		const bike = app.players[ i ].bike;
+		if ( ! bike ) continue;
 
-		x += Math.cos( angles[ i ] ) * weights[ i ];
-		y += Math.sin( angles[ i ] ) * weights[ i ];
+		if ( Math.abs( bike.x ) > 19 || Math.abs( bike.y ) > 8 ) {
+
+			app.players[ i ].bike = undefined;
+			bike.kill();
+
+		}
+
+		new app.Wall( { owner: bike.owner, x: bike.x, y: bike.y } );
+
+		if ( bike.facing !== bike.oldFacing ) {
+
+			if ( bike.facing === 0 || bike.facing === Math.PI ) {
+
+				bike.x = app.linearTween( { start: bike.x, rate: bike.speed * Math.cos( bike.facing ), duration: Infinity } );
+				bike.y = bike.y;
+
+			} else {
+
+				bike.x = bike.x;
+				bike.y = app.linearTween( { start: bike.y, rate: bike.speed * Math.sin( bike.facing ), duration: Infinity } );
+
+			}
+
+			bike.oldFacing = bike.facing;
+
+		}
 
 	}
-
-	return Math.atan2( y, x );
 
 }
-
-bounceRegion.addEventListener( "unitLeave", () => {
-
-	if ( Math.abs( ball.y ) >= 6.5 - 1e-7 ) {
-
-		ball.facing = Math.PI * 2 - ball.facing;
-		ball.y = app.linearTween( { start: ball.y, rate: - ball.shadowProps.y.rate, duration: Infinity } );
-
-		return;
-
-	}
-
-	let diff;
-	if ( ( ball.x >= 11.5 - 1e-7 && ( diff = rightPaddle.y - ball.y ) || ( ball.x <= - 11.5 + 1e-7 && ( diff = leftPaddle.y - ball.y ) ) ) && Math.abs( diff ) < 2.5 ) {
-
-		const reflectionAngle = Math.PI - ball.facing;
-		const sportAngle = diff < 0 ? Math.PI / 2 : - Math.PI / 2;
-
-		ball.facing = angleWeightedAverage( [ reflectionAngle, sportAngle ], [ 1, Math.abs( diff ) / 2.5 ] );
-
-		ball.x = app.linearTween( { start: ball.x, rate: 10 * Math.cos( ball.facing ), duration: Infinity } );
-		ball.y = app.linearTween( { start: ball.y, rate: 10 * Math.sin( ball.facing ), duration: Infinity } );
-
-	}
-
-} );
-
-scoreRegion.addEventListener( "unitLeave", () => {
-
-	const winner = ball.x < 0 ? rightPaddle.owner : leftPaddle.owner;
-
-	const prefix = winner === leftPaddle.owner ? "left" : "right";
-
-	++ app.state[ prefix + "Score" ];
-	if ( WebCraft.isBrowser )
-		document.getElementById( prefix + "-score" ).textContent = app.state[ prefix + "Score" ];
-
-	ball.x = ball.x;
-	ball.y = ball.y;
-
-	startTimeout = app.setTimeout( start, 1000 );
-
-} );
 
 /////////////////////////////////////////////////
 ///// Game Events
@@ -214,50 +189,49 @@ app.addEventListener( "start", () => {
 
 } );
 
-app.addEventListener( "playerLeave", e => {
+// app.addEventListener( "playerLeave", e => {
+//
+// 	// if ( e.player !== leftPaddle.owner && e.player !== rightPaddle.owner ) return;
+//
+// 	startTimeout.clear();
+// 	startTimeout = undefined;
+//
+// 	// ball.x = ball.x;
+// 	// ball.y = ball.y;
+//
+// 	if ( app.players.length < 2 ) return;
+//
+// 	reset();
+//
+// 	startTimeout = app.setTimeout( () => ( init(), start() ), 1000 );
+//
+// } );
 
-	if ( e.player !== leftPaddle.owner && e.player !== rightPaddle.owner ) return;
-
-	startTimeout.clear();
-	startTimeout = undefined;
-
-	ball.x = ball.x;
-	ball.y = ball.y;
-
-	if ( app.players.length < 2 ) return;
-
-	reset();
-
-	startTimeout = app.setTimeout( () => ( init(), start() ), 1000 );
-
-} );
-
-app.addEventListener( "state", e => {
-
-	if ( ! WebCraft.isBrowser ) return;
-
-	if ( e.state.leftScore !== undefined ) document.getElementById( "left-score" ).textContent = app.state.leftScore;
-	if ( e.state.rightScore !== undefined ) document.getElementById( "right-score" ).textContent = app.state.rightScore;
-
-} );
+// app.addEventListener( "state", e => {
+//
+// 	if ( ! WebCraft.isBrowser ) return;
+//
+// 	if ( e.state.leftScore !== undefined ) document.getElementById( "left-score" ).textContent = app.state.leftScore;
+// 	if ( e.state.rightScore !== undefined ) document.getElementById( "right-score" ).textContent = app.state.rightScore;
+//
+// } );
 
 /////////////////////////////////////////////////
 ///// Player Actions
 /////////////////////////////////////////////////
 
-app.addEventListener( "up down hold", paddleEvent );
+app.addEventListener( "up down left right", bikeEvent );
 
-function paddleEvent( { type, player } ) {
+function bikeEvent( { type, player } ) {
 
-	let paddle = leftPaddle.owner === player && leftPaddle || rightPaddle.owner === player && rightPaddle;
-
-	if ( ! paddle ) return;
+	const bike = player.bike;
 
 	switch ( type ) {
 
-		case "up": return paddle.y = app.linearTween( { start: paddle.y, end: 4.5, rate: 5 } );
-		case "down": return paddle.y = app.linearTween( { start: paddle.y, end: - 4.5, rate: - 5 } );
-		case "hold": return paddle.y = paddle.y;
+		case "right": bike.facing = 0; break;
+		case "up": bike.facing = Math.PI / 2; break;
+		case "left": bike.facing = Math.PI; break;
+		case "down": bike.facing = Math.PI * 3 / 2; break;
 
 	}
 
