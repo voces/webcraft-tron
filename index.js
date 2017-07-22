@@ -13,6 +13,8 @@
 		THREE = require( "three" );
 		WebCraft = require( "webcraft" );
 
+		process.stdout.on( "error", () => {} );
+
 	}
 
 }
@@ -68,29 +70,50 @@ const app = new WebCraft.App( {
 
 new app.Arena();
 
-app.state = {
-	players: app.players
-};
+const grid = [];
+for ( let i = 0; i <= 40; i ++ ) grid[ i ] = [];
 
-Object.defineProperty( app.state, "start", {
-	get: () => startTimeout && startTimeout.time,
-	set: time => startTimeout = startTimeout = app.setTimeout( start, time, true ),
-	enumerable: true
+const bikes = [];
+
+const scores = Array( 8 ).fill( 0 );
+
+app.state = { players: app.players, bikes, grid, scores };
+
+Object.defineProperties( app.state, {
+	tick: {
+		get: () => ticker && { inteval: ticker.interval, nextTick: ticker.time },
+		set: descriptor => ticker = typeof descriptor === "object" && descriptor !== null ? app.setInterval( tick, descriptor.interval, descriptor.nextTick ) : descriptor,
+		enumerable: true
+	},
+	startTimer: {
+		get: () => startTimer && startTimer.time,
+		set: time => startTimer = typeof time === "number" ? app.setTimeout( start, time ) : time,
+		enumerable: true
+	}
 } );
 
+const speed = 6.25;
+
+const direction = {
+	right: 0,
+	up: Math.PI / 2,
+	left: Math.PI,
+	down: Math.PI * 3 / 2
+};
+
 const spawnLocations = [
-	{ x: - 15, y: 6, facing: 0, speed: 10 },
-	{ x: 15, y: 6, facing: Math.PI, speed: 10 },
-	{ x: - 15, y: 2, facing: 0, speed: 10 },
-	{ x: 15, y: 2, facing: Math.PI, speed: 10 },
-	{ x: - 15, y: - 2, facing: 0, speed: 10 },
-	{ x: 15, y: - 2, facing: Math.PI, speed: 10 },
-	{ x: - 15, y: - 6, facing: 0, speed: 10 },
-	{ x: 15, y: - 6, facing: Math.PI, speed: 10 }
+	{ x: - 15, y: 6, facing: direction.right, speed },
+	{ x: 15, y: 6, facing: direction.left, speed },
+	{ x: - 15, y: 2, facing: direction.right, speed },
+	{ x: 15, y: 2, facing: direction.left, speed },
+	{ x: - 15, y: - 2, facing: direction.right, speed },
+	{ x: 15, y: - 2, facing: direction.left, speed },
+	{ x: - 15, y: - 6, facing: direction.right, speed },
+	{ x: 15, y: - 6, facing: direction.left, speed }
 ];
 
-let tick;
-let startTimeout;
+let ticker;
+let startTimer;
 
 /////////////////////////////////////////////////
 ///// Game Logic
@@ -98,25 +121,35 @@ let startTimeout;
 
 function reset() {
 
+	const units = [ ...app.units ];
+
+	for ( let i = 0; i < units.length; i ++ )
+		units[ i ].remove();
+
+	for ( let x = 0; x <= 40; x ++ )
+		grid[ x ] = [];
+
+	bikes.splice( 0 );
+
 	if ( ! WebCraft.isBrowser ) return;
 
 	app.state.leftScore = app.state.rightScore = document.getElementById( "left-score" ).textContent = document.getElementById( "right-score" ).textContent = 0;
 
 }
 
-function init() {
-
-	// leftPaddle.owner = app.players[ 0 ];
-	// rightPaddle.owner = app.players[ 1 ];
-
-}
-
 function start() {
+
+	console.log( "start" );
+
+	startTimer = undefined;
+
+	reset();
 
 	for ( let i = 0; i < 8 && i < app.players.length; i ++ ) {
 
 		const bike = new app.Bike( Object.assign( { owner: app.players[ i ] }, spawnLocations[ i ] ) );
 		app.players[ i ].bike = bike;
+		bikes.push( bike );
 
 		bike.x = app.linearTween( { start: bike.x, rate: bike.speed * Math.cos( bike.facing ), duration: Infinity } );
 
@@ -124,38 +157,56 @@ function start() {
 
 	}
 
-	tickFunc();
-	tick = app.setInterval( tickFunc, 100 );
+	tick();
+	ticker = app.setInterval( tick, 1000 / speed );
 
 }
 
-function tickFunc() {
+function tick() {
+
+	let death = false;
 
 	for ( let i = 0; i < app.players.length && i < 8; i ++ ) {
 
 		const bike = app.players[ i ].bike;
 		if ( ! bike ) continue;
 
-		if ( Math.abs( bike.x ) > 19 || Math.abs( bike.y ) > 8 ) {
+		const x = Math.round( bike.x );
+		const y = Math.round( bike.y );
 
-			app.players[ i ].bike = undefined;
-			bike.kill();
+		if ( Math.abs( x ) < 21 && Math.abs( y ) < 10 && grid[ x + 20 ][ y + 9 ] === undefined )
+			continue;
 
-		}
+		console.log( "death", app.players[ i ].color.name );
+		death = true;
+		app.players[ i ].bike = undefined;
+		bike.kill();
+		bikes.splice( bikes.indexOf( bike ), 1 );
 
-		new app.Wall( { owner: bike.owner, x: bike.x, y: bike.y } );
+	}
+
+	for ( let i = 0; i < app.players.length && i < 8; i ++ ) {
+
+		const bike = app.players[ i ].bike;
+		if ( ! bike ) continue;
+
+		const x = Math.round( bike.x );
+		const y = Math.round( bike.y );
+
+		new app.Wall( { owner: bike.owner, x: x, y: y } );
+		grid[ x + 20 ][ y + 9 ] = new app.Wall( { owner: bike.owner, x: x, y: y } );
 
 		if ( bike.facing !== bike.oldFacing ) {
 
 			if ( bike.facing === 0 || bike.facing === Math.PI ) {
 
-				bike.x = app.linearTween( { start: bike.x, rate: bike.speed * Math.cos( bike.facing ), duration: Infinity } );
-				bike.y = bike.y;
+				bike.x = app.linearTween( { start: x, rate: bike.speed * Math.cos( bike.facing ), duration: Infinity } );
+				bike.y = y;
 
 			} else {
 
-				bike.x = bike.x;
-				bike.y = app.linearTween( { start: bike.y, rate: bike.speed * Math.sin( bike.facing ), duration: Infinity } );
+				bike.x = x;
+				bike.y = app.linearTween( { start: y, rate: bike.speed * Math.sin( bike.facing ), duration: Infinity } );
 
 			}
 
@@ -164,6 +215,25 @@ function tickFunc() {
 		}
 
 	}
+
+	if ( ! death || bikes.length > 1 ) return;
+
+	if ( bikes.length === 0 ) {
+
+		ticker = ticker.clear();
+		startTimer = app.setTimeout( start, 1000 );
+		return;
+
+	}
+
+	const winner = bikes[ 0 ].owner;
+
+	winner.bike.x = winner.bike.x;
+	winner.bike.y = winner.bike.y;
+
+	ticker = ticker.clear();
+
+	startTimer = app.setTimeout( start, 1000 );
 
 }
 
@@ -181,40 +251,55 @@ app.addEventListener( "playerJoin", () => {
 
 } );
 
-app.addEventListener( "start", () => {
+app.addEventListener( "start", () => start() );
 
-	reset();
-	init();
-	start();
+app.addEventListener( "playerLeave", e => {
+
+	if ( startTimer ) {
+
+		startTimer.clear();
+		return;
+
+	}
+
+	if ( e.player.bike ) {
+
+		e.player.bike.kill();
+		bikes.splice( bikes.indexOf( e.player.bike ), 1 );
+		e.player.bike = undefined;
+
+	}
+
+	if ( bikes.length === 1 ) {
+
+		const bike = bikes[ 0 ];
+
+		bike.x = bike.x;
+		bike.y = bike.y;
+
+		ticker = ticker.clear();
+
+		return;
+
+	}
+
+	if ( bikes.length !== 0 ) return;
+	bikes = [].splice( 0 );
+	ticker = ticker.clear();
 
 } );
 
-// app.addEventListener( "playerLeave", e => {
-//
-// 	// if ( e.player !== leftPaddle.owner && e.player !== rightPaddle.owner ) return;
-//
-// 	startTimeout.clear();
-// 	startTimeout = undefined;
-//
-// 	// ball.x = ball.x;
-// 	// ball.y = ball.y;
-//
-// 	if ( app.players.length < 2 ) return;
-//
-// 	reset();
-//
-// 	startTimeout = app.setTimeout( () => ( init(), start() ), 1000 );
-//
-// } );
+app.addEventListener( "state", e => {
 
-// app.addEventListener( "state", e => {
-//
-// 	if ( ! WebCraft.isBrowser ) return;
-//
-// 	if ( e.state.leftScore !== undefined ) document.getElementById( "left-score" ).textContent = app.state.leftScore;
-// 	if ( e.state.rightScore !== undefined ) document.getElementById( "right-score" ).textContent = app.state.rightScore;
-//
-// } );
+	if ( ! WebCraft.isBrowser ) return;
+
+	for ( let i = 0; i < e.state.bikes.length; i ++ )
+		e.state.bikes[ i ].owner.bike = e.state.bikes[ i ];
+
+	// if ( e.state.leftScore !== undefined ) document.getElementById( "left-score" ).textContent = app.state.leftScore;
+	// if ( e.state.rightScore !== undefined ) document.getElementById( "right-score" ).textContent = app.state.rightScore;
+
+} );
 
 /////////////////////////////////////////////////
 ///// Player Actions
@@ -226,13 +311,11 @@ function bikeEvent( { type, player } ) {
 
 	const bike = player.bike;
 
-	switch ( type ) {
+	if ( ! bike ) return;
 
-		case "right": bike.facing = 0; break;
-		case "up": bike.facing = Math.PI / 2; break;
-		case "left": bike.facing = Math.PI; break;
-		case "down": bike.facing = Math.PI * 3 / 2; break;
+	if ( Math.abs( ( ( bike.oldFacing + Math.PI ) % ( Math.PI * 2 ) ) - direction[ type ] ) < 1e-6 )
+		return;
 
-	}
+	bike.facing = direction[ type ];
 
 }
