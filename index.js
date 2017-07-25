@@ -77,17 +77,22 @@ const bikes = [];
 
 const scores = Array( 8 ).fill( 0 );
 
-app.state = { players: app.players, bikes, grid, scores };
+app.state = { players: app.players, bikes, grid };
 
 Object.defineProperties( app.state, {
 	tick: {
-		get: () => ticker && { inteval: ticker.interval, nextTick: ticker.time },
-		set: descriptor => ticker = typeof descriptor === "object" && descriptor !== null ? app.setInterval( tick, descriptor.interval, descriptor.nextTick ) : descriptor,
+		get: () => ticker && { interval: ticker.interval, nextTick: ticker.time },
+		set: descriptor => ( console.log( descriptor ), ticker = typeof descriptor === "object" && descriptor !== null ? app.setInterval( tick, descriptor.interval, descriptor.nextTick ) : descriptor ),
 		enumerable: true
 	},
 	startTimer: {
 		get: () => startTimer && startTimer.time,
 		set: time => startTimer = typeof time === "number" ? app.setTimeout( start, time ) : time,
+		enumerable: true
+	},
+	scores: {
+		get: () => app.players.slice( 0, 8 ).map( player => player.score || 0 ),
+		set: scores => scores.map( ( score, i ) => app.players[ i ].score = score ),
 		enumerable: true
 	}
 } );
@@ -139,8 +144,6 @@ function reset() {
 
 function start() {
 
-	console.log( "start" );
-
 	startTimer = undefined;
 
 	reset();
@@ -177,7 +180,6 @@ function tick() {
 		if ( Math.abs( x ) < 21 && Math.abs( y ) < 10 && grid[ x + 20 ][ y + 9 ] === undefined )
 			continue;
 
-		console.log( "death", app.players[ i ].color.name );
 		death = true;
 		app.players[ i ].bike = undefined;
 		bike.kill();
@@ -228,6 +230,8 @@ function tick() {
 
 	const winner = bikes[ 0 ].owner;
 
+	++ winner.score;
+
 	winner.bike.x = winner.bike.x;
 	winner.bike.y = winner.bike.y;
 
@@ -241,7 +245,9 @@ function tick() {
 ///// Game Events
 /////////////////////////////////////////////////
 
-app.addEventListener( "playerJoin", () => {
+app.addEventListener( "playerJoin", e => {
+
+	if ( e.player.score === undefined ) e.player.score = 0;
 
 	if ( ! WebCraft.isServer || app.players.length !== 2 ) return;
 
@@ -293,11 +299,12 @@ app.addEventListener( "state", e => {
 
 	if ( ! WebCraft.isBrowser ) return;
 
-	for ( let i = 0; i < e.state.bikes.length; i ++ )
-		e.state.bikes[ i ].owner.bike = e.state.bikes[ i ];
+	for ( let i = 0; i < e.state.bikes.length; i ++ ) {
 
-	// if ( e.state.leftScore !== undefined ) document.getElementById( "left-score" ).textContent = app.state.leftScore;
-	// if ( e.state.rightScore !== undefined ) document.getElementById( "right-score" ).textContent = app.state.rightScore;
+		e.state.bikes[ i ].owner.bike = e.state.bikes[ i ];
+		e.state.bikes[ i ].oldFacing = e.state.bikes[ i ].facing;
+
+	}
 
 } );
 
