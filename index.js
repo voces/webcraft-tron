@@ -75,14 +75,12 @@ for ( let i = 0; i <= 40; i ++ ) grid[ i ] = [];
 
 const bikes = [];
 
-const scores = Array( 8 ).fill( 0 );
-
 app.state = { players: app.players, bikes, grid };
 
 Object.defineProperties( app.state, {
 	tick: {
 		get: () => ticker && { interval: ticker.interval, nextTick: ticker.time },
-		set: descriptor => ( console.log( descriptor ), ticker = typeof descriptor === "object" && descriptor !== null ? app.setInterval( tick, descriptor.interval, descriptor.nextTick ) : descriptor ),
+		set: descriptor => ticker = typeof descriptor === "object" && descriptor !== null ? app.setInterval( tick, descriptor.interval, descriptor.nextTick ) : descriptor,
 		enumerable: true
 	},
 	startTimer: {
@@ -136,10 +134,6 @@ function reset() {
 
 	bikes.splice( 0 );
 
-	if ( ! WebCraft.isBrowser ) return;
-
-	app.state.leftScore = app.state.rightScore = document.getElementById( "left-score" ).textContent = document.getElementById( "right-score" ).textContent = 0;
-
 }
 
 function start() {
@@ -147,6 +141,38 @@ function start() {
 	startTimer = undefined;
 
 	reset();
+
+	if ( WebCraft.isBrowser )
+		for ( let i = 0; i < 8 && i < app.players.length; i ++ ) {
+
+			if ( ! app.players[ i ] ) {
+
+				document.querySelectorAll( `.row-${i} span` ).forEach( e => e.textContent = "" );
+				continue;
+
+			}
+
+			if ( app.players[ i ]._score === undefined ) {
+
+				const oldScore = app.players[ i ].score || 0;
+
+				Object.defineProperty( app.players[ i ], "score", {
+					get: () => app.players[ i ]._score,
+					set: score => {
+
+						app.players[ i ]._score = score;
+						document.querySelector( `.row-${i} .score` ).textContent = score;
+
+					}
+				} );
+
+				app.players[ i ].score = oldScore;
+
+			}
+
+			document.querySelector( `.row-${i} .player` ).textContent = app.players[ i ].color.name;
+
+		}
 
 	for ( let i = 0; i < 8 && i < app.players.length; i ++ ) {
 
@@ -246,8 +272,6 @@ function tick() {
 /////////////////////////////////////////////////
 
 app.addEventListener( "playerJoin", e => {
-
-	if ( e.player.score === undefined ) e.player.score = 0;
 
 	if ( ! WebCraft.isServer || app.players.length !== 2 ) return;
 

@@ -6,15 +6,7 @@
     <script src="./node_modules/webcraft/build/webcraft.js"></script>
     <style>
     body { margin: 0; font-style: sans-serif; }
-    span {
-        position: absolute;
-        color: white;
-        font-size: 3em;
-        z-index: 2;
-    }
-    #left-score { left: 1em; }
-    #right-score { right: 1em; }
-    canvas {
+	canvas {
         position: absolute;
         top: 0;
         bottom: 0;
@@ -22,11 +14,47 @@
         right: 0;
         z-index: 0;
     }
+
+	*:not(canvas) { z-index: 1; }
+
+    .leaderboard {
+		font-size: 1.5em;
+		color: white;
+		position: absolute;
+		right: 1em;
+		top: 0.5em;
+		background-color: rgba(0, 0, 0, 0.5);
+		border: 1px outset gold;
+		border-radius: 0.25em;
+		box-shadow: 0 0 0.25em black;
+	}
+	.leaderboard .row {
+		display: flex;
+		justify-content: space-between;
+	}
+	.leaderboard .row :not(:empty) { padding: 0 0.5em; }
+
+	.row-0 { color: #FF0000; }
+	.row-1 { color: #4385FF; }
+	.row-2 { color: #64FFFF; }
+	.row-3 { color: #820096; }
+	.row-4 { color: #FFEA00; }
+	.row-5 { color: #FF9900; }
+	.row-6 { color: #BEFF00; }
+	.row-7 { color: #FF00FF; }
     </style>
 </head>
 <body>
-    <span id="left-score">0</span>
-    <span id="right-score">0</span>
+	<div class="leaderboard">
+		<div class="row row-0"><span class="player"></span> <span class="score"></span></div>
+		<div class="row row-1"><span class="player"></span> <span class="score"></span></div>
+		<div class="row row-2"><span class="player"></span> <span class="score"></span></div>
+		<div class="row row-3"><span class="player"></span> <span class="score"></span></div>
+		<div class="row row-4"><span class="player"></span> <span class="score"></span></div>
+		<div class="row row-5"><span class="player"></span> <span class="score"></span></div>
+		<div class="row row-6"><span class="player"></span> <span class="score"></span></div>
+		<div class="row row-7"><span class="player"></span> <span class="score"></span></div>
+	</div>
     <script src="index.js"></script>
 </body>
 </html>
