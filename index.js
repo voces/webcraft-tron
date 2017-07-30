@@ -89,8 +89,8 @@ Object.defineProperties( app.state, {
 		enumerable: true
 	},
 	scores: {
-		get: () => app.players.slice( 0, 8 ).map( player => player.score || 0 ),
-		set: scores => scores.map( ( score, i ) => app.players[ i ].score = score ),
+		get: () => app.players.here.slice( 0, 8 ).map( player => player.score || 0 ),
+		set: scores => scores.map( ( score, i ) => app.players.here[ i ].score = score ),
 		enumerable: true
 	}
 } );
@@ -134,6 +134,8 @@ function reset() {
 
 	bikes.splice( 0 );
 
+	app.players.filter( player => player.status === "left" ).forEach( player => player.remove() );
+
 }
 
 function start() {
@@ -142,42 +144,49 @@ function start() {
 
 	reset();
 
+	const players = app.players.here;
+
 	if ( WebCraft.isBrowser )
-		for ( let i = 0; i < 8 && i < app.players.length; i ++ ) {
+		for ( let i = 0; i < 8 && i < players.length; i ++ ) {
 
-			if ( ! app.players[ i ] ) {
+			const player = players[ i ];
+			const ele = document.querySelectorAll( ".row" )[ i ];
+			const scoreEle = ele.querySelector( ".score" );
 
-				document.querySelectorAll( `.row-${i} span` ).forEach( e => e.textContent = "" );
+			if ( ! player ) {
+
+				ele.querySelectorAll( "span" ).textContent = "";
 				continue;
 
 			}
 
-			if ( app.players[ i ]._score === undefined ) {
+			if ( player._score === undefined ) {
 
-				const oldScore = app.players[ i ].score || 0;
+				const oldScore = player.score || 0;
 
-				Object.defineProperty( app.players[ i ], "score", {
-					get: () => app.players[ i ]._score,
+				Object.defineProperty( player, "score", {
+					get: () => player._score,
 					set: score => {
 
-						app.players[ i ]._score = score;
-						document.querySelector( `.row-${i} .score` ).textContent = score;
+						player._score = score;
+						scoreEle.textContent = score;
 
 					}
 				} );
 
-				app.players[ i ].score = oldScore;
+				player.score = oldScore;
 
 			}
 
-			document.querySelector( `.row-${i} .player` ).textContent = app.players[ i ].color.name;
+			ele.querySelector( ".player" ).textContent = player.color.name;
+			ele.style.color = player.color.hex;
 
 		}
 
-	for ( let i = 0; i < 8 && i < app.players.length; i ++ ) {
+	for ( let i = 0; i < 8 && i < players.length; i ++ ) {
 
-		const bike = new app.Bike( Object.assign( { owner: app.players[ i ] }, spawnLocations[ i ] ) );
-		app.players[ i ].bike = bike;
+		const bike = new app.Bike( Object.assign( { owner: players[ i ] }, spawnLocations[ i ] ) );
+		players[ i ].bike = bike;
 		bikes.push( bike );
 
 		bike.x = app.linearTween( { start: bike.x, rate: bike.speed * Math.cos( bike.facing ), duration: Infinity } );
@@ -195,9 +204,11 @@ function tick() {
 
 	let death = false;
 
-	for ( let i = 0; i < app.players.length && i < 8; i ++ ) {
+	const players = app.players.here;
 
-		const bike = app.players[ i ].bike;
+	for ( let i = 0; i < players.length && i < 8; i ++ ) {
+
+		const bike = players[ i ].bike;
 		if ( ! bike ) continue;
 
 		const x = Math.round( bike.x );
@@ -207,15 +218,15 @@ function tick() {
 			continue;
 
 		death = true;
-		app.players[ i ].bike = undefined;
+		players[ i ].bike = undefined;
 		bike.kill();
 		bikes.splice( bikes.indexOf( bike ), 1 );
 
 	}
 
-	for ( let i = 0; i < app.players.length && i < 8; i ++ ) {
+	for ( let i = 0; i < players.length && i < 8; i ++ ) {
 
-		const bike = app.players[ i ].bike;
+		const bike = players[ i ].bike;
 		if ( ! bike ) continue;
 
 		const x = Math.round( bike.x );
@@ -271,9 +282,9 @@ function tick() {
 ///// Game Events
 /////////////////////////////////////////////////
 
-app.addEventListener( "playerJoin", e => {
+app.addEventListener( "playerJoin", () => {
 
-	if ( ! WebCraft.isServer || app.players.length !== 2 ) return;
+	if ( ! WebCraft.isServer || app.players.here.length !== 2 ) return;
 
 	const event = { type: "start" };
 
@@ -285,12 +296,7 @@ app.addEventListener( "start", () => start() );
 
 app.addEventListener( "playerLeave", e => {
 
-	if ( startTimer ) {
-
-		startTimer.clear();
-		return;
-
-	}
+	if ( startTimer ) return;
 
 	if ( e.player.bike ) {
 
@@ -302,20 +308,25 @@ app.addEventListener( "playerLeave", e => {
 
 	if ( bikes.length === 1 ) {
 
-		const bike = bikes[ 0 ];
+		const winner = bikes[ 0 ].owner;
 
-		bike.x = bike.x;
-		bike.y = bike.y;
+		++ winner.score;
+
+		winner.bike.x = winner.bike.x;
+		winner.bike.y = winner.bike.y;
 
 		ticker = ticker.clear();
+
+		startTimer = app.setTimeout( start, 1000 );
 
 		return;
 
 	}
 
 	if ( bikes.length !== 0 ) return;
-	bikes = [].splice( 0 );
+
 	ticker = ticker.clear();
+	startTimer = app.setTimeout( start, 1000 );
 
 } );
 
@@ -344,7 +355,7 @@ function bikeEvent( { type, player } ) {
 
 	if ( ! bike ) return;
 
-	if ( Math.abs( ( ( bike.oldFacing + Math.PI ) % ( Math.PI * 2 ) ) - direction[ type ] ) < 1e-6 )
+	if ( Math.abs( ( ( bike.oldFacing + Math.PI ) % ( Math.PI * 2 ) ) - direction[ type ] ) < 1e-6 || bike.facing !== bike.oldFacing )
 		return;
 
 	bike.facing = direction[ type ];
