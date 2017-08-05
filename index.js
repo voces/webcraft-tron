@@ -185,6 +185,7 @@ function tick() {
 		bike.owner.bike = undefined;
 		bike.kill();
 		bikes.splice( bikes.indexOf( bike ), 1 );
+		i --;
 
 	}
 
@@ -250,7 +251,7 @@ function onNewPlayer( player ) {
 
 	if ( player.score === undefined ) player.score = 0;
 
-	if ( WebCraft.isBrowser ) addPlayerToLeaderboard( player );
+	if ( WebCraft.isBrowser && app.players.here.slice( 0, 8 ).indexOf( player ) >= 0 ) addPlayerToLeaderboard( player );
 
 }
 
@@ -320,7 +321,14 @@ app.addEventListener( "playerLeave", ( { player } ) => {
 
 	}
 
-	if ( WebCraft.isBrowser ) player.leaderboardRow.remove();
+	if ( WebCraft.isBrowser && player.leaderboardRow ) {
+
+		player.leaderboardRow.remove();
+
+		const players = app.players.here;
+		if ( players.length >= 8 ) addPlayerToLeaderboard( players[ 7 ] );
+
+	}
 
 } );
 
