@@ -25,6 +25,26 @@
 
 const keyboard = {};
 
+const speed = 6.25;
+
+const Direction = {
+	Right: 0,
+	Up: Math.PI / 2,
+	Left: Math.PI,
+	Down: Math.PI * 3 / 2
+};
+
+const spawnLocations = [
+	{ x: - 15, y: 6, facing: Direction.Right, speed },
+	{ x: 15, y: 6, facing: Direction.Left, speed },
+	{ x: - 15, y: 2, facing: Direction.Right, speed },
+	{ x: 15, y: 2, facing: Direction.Left, speed },
+	{ x: - 15, y: - 2, facing: Direction.Right, speed },
+	{ x: 15, y: - 2, facing: Direction.Left, speed },
+	{ x: - 15, y: - 6, facing: Direction.Right, speed },
+	{ x: 15, y: - 6, facing: Direction.Left, speed }
+];
+
 const app = new WebCraft.App( {
 
 	network: { host: "notextures.io", port: 8086 },
@@ -44,7 +64,7 @@ const app = new WebCraft.App( {
 			if ( keyboard[ e.key ] ) return;
 			keyboard[ e.key ] = true;
 
-			if ( ! app.localPlayer.bike ) return;
+			if ( ! app.localPlayer || ! app.localPlayer.bike ) return;
 
 			const eventType = e.key === "ArrowUp" && "up" ||
 				e.key === "ArrowDown" && "down" ||
@@ -70,12 +90,11 @@ const app = new WebCraft.App( {
 
 new app.Arena();
 
-const grid = [];
-for ( let i = 0; i <= 40; i ++ ) grid[ i ] = [];
+let bikes = [];
+let grid = [];
+for ( let i = 0; i <= 40; i ++ ) grid[ i ] = {};
 
-const bikes = [];
-
-app.state = { players: app.players, bikes, grid };
+app.state = { players: app.players };
 
 Object.defineProperties( app.state, {
 	tick: {
@@ -85,35 +104,17 @@ Object.defineProperties( app.state, {
 	},
 	startTimer: {
 		get: () => startTimer && startTimer.time,
-		set: time => startTimer = typeof time === "number" ? app.setTimeout( start, time ) : time,
+		set: time => startTimer = typeof time === "number" ? app.setTimeout( start, time, true ) : time,
 		enumerable: true
 	},
 	scores: {
 		get: () => app.players.here.slice( 0, 8 ).map( player => player.score || 0 ),
-		set: scores => scores.map( ( score, i ) => app.players.here[ i ].score = score ),
+		set: scores => scores.forEach( ( score, i ) => app.players.here[ i ].score = score ),
 		enumerable: true
-	}
+	},
+	bikes: { get: () => bikes, set: value => bikes = value, enumerable: true },
+	grid: { get: () => grid, set: value => grid = value, enumerable: true }
 } );
-
-const speed = 6.25;
-
-const direction = {
-	right: 0,
-	up: Math.PI / 2,
-	left: Math.PI,
-	down: Math.PI * 3 / 2
-};
-
-const spawnLocations = [
-	{ x: - 15, y: 6, facing: direction.right, speed },
-	{ x: 15, y: 6, facing: direction.left, speed },
-	{ x: - 15, y: 2, facing: direction.right, speed },
-	{ x: 15, y: 2, facing: direction.left, speed },
-	{ x: - 15, y: - 2, facing: direction.right, speed },
-	{ x: 15, y: - 2, facing: direction.left, speed },
-	{ x: - 15, y: - 6, facing: direction.right, speed },
-	{ x: 15, y: - 6, facing: direction.left, speed }
-];
 
 let ticker;
 let startTimer;
@@ -130,7 +131,7 @@ function reset() {
 		units[ i ].remove();
 
 	for ( let x = 0; x <= 40; x ++ )
-		grid[ x ] = [];
+		grid[ x ] = {};
 
 	bikes.splice( 0 );
 
@@ -144,46 +145,9 @@ function start() {
 
 	reset();
 
-	const players = app.players.here;
+	const players = app.players.here.slice( 0, 8 );
 
-	if ( WebCraft.isBrowser )
-		for ( let i = 0; i < 8 && i < players.length; i ++ ) {
-
-			const player = players[ i ];
-			const ele = document.querySelectorAll( ".row" )[ i ];
-			const scoreEle = ele.querySelector( ".score" );
-
-			if ( ! player ) {
-
-				ele.querySelectorAll( "span" ).textContent = "";
-				continue;
-
-			}
-
-			if ( player._score === undefined ) {
-
-				const oldScore = player.score || 0;
-
-				Object.defineProperty( player, "score", {
-					get: () => player._score,
-					set: score => {
-
-						player._score = score;
-						scoreEle.textContent = score;
-
-					}
-				} );
-
-				player.score = oldScore;
-
-			}
-
-			ele.querySelector( ".player" ).textContent = player.color.name;
-			ele.style.color = player.color.hex;
-
-		}
-
-	for ( let i = 0; i < 8 && i < players.length; i ++ ) {
+	for ( let i = 0; i < players.length; i ++ ) {
 
 		const bike = new app.Bike( Object.assign( { owner: players[ i ] }, spawnLocations[ i ] ) );
 		players[ i ].bike = bike;
@@ -192,6 +156,9 @@ function start() {
 		bike.x = app.linearTween( { start: bike.x, rate: bike.speed * Math.cos( bike.facing ), duration: Infinity } );
 
 		bike.oldFacing = bike.facing;
+
+		if ( WebCraft.isBrowser )
+			players[ i ].scoreSpan.textContent = players[ i ].score;
 
 	}
 
@@ -204,12 +171,9 @@ function tick() {
 
 	let death = false;
 
-	const players = app.players.here;
+	for ( let i = 0; i < bikes.length; i ++ ) {
 
-	for ( let i = 0; i < players.length && i < 8; i ++ ) {
-
-		const bike = players[ i ].bike;
-		if ( ! bike ) continue;
+		const bike = bikes[ i ];
 
 		const x = Math.round( bike.x );
 		const y = Math.round( bike.y );
@@ -218,16 +182,15 @@ function tick() {
 			continue;
 
 		death = true;
-		players[ i ].bike = undefined;
+		bike.owner.bike = undefined;
 		bike.kill();
 		bikes.splice( bikes.indexOf( bike ), 1 );
 
 	}
 
-	for ( let i = 0; i < players.length && i < 8; i ++ ) {
+	for ( let i = 0; i < bikes.length; i ++ ) {
 
-		const bike = players[ i ].bike;
-		if ( ! bike ) continue;
+		const bike = bikes[ i ];
 
 		const x = Math.round( bike.x );
 		const y = Math.round( bike.y );
@@ -274,7 +237,8 @@ function tick() {
 
 	ticker = ticker.clear();
 
-	startTimer = app.setTimeout( start, 1000 );
+	if ( app.players.here.length >= 2 )
+		startTimer = app.setTimeout( start, 1000 );
 
 }
 
@@ -282,51 +246,20 @@ function tick() {
 ///// Game Events
 /////////////////////////////////////////////////
 
-app.addEventListener( "playerJoin", () => {
+function onNewPlayer( player ) {
 
-	if ( ! WebCraft.isServer || app.players.here.length !== 2 ) return;
+	if ( player.score === undefined ) player.score = 0;
 
-	const event = { type: "start" };
+	if ( WebCraft.isBrowser ) addPlayerToLeaderboard( player );
 
-	app.setTimeout( () => ( app.network.send( event ), app.dispatchEvent( event ) ), 1000 );
+}
 
-} );
+app.addEventListener( "playerJoin", ( { player } ) => {
 
-app.addEventListener( "start", () => start() );
-
-app.addEventListener( "playerLeave", e => {
-
-	if ( startTimer ) return;
-
-	if ( e.player.bike ) {
-
-		e.player.bike.kill();
-		bikes.splice( bikes.indexOf( e.player.bike ), 1 );
-		e.player.bike = undefined;
-
-	}
-
-	if ( bikes.length === 1 ) {
-
-		const winner = bikes[ 0 ].owner;
-
-		++ winner.score;
-
-		winner.bike.x = winner.bike.x;
-		winner.bike.y = winner.bike.y;
-
-		ticker = ticker.clear();
-
+	if ( app.players.here.length === 2 )
 		startTimer = app.setTimeout( start, 1000 );
 
-		return;
-
-	}
-
-	if ( bikes.length !== 0 ) return;
-
-	ticker = ticker.clear();
-	startTimer = app.setTimeout( start, 1000 );
+	onNewPlayer( player );
 
 } );
 
@@ -341,7 +274,81 @@ app.addEventListener( "state", e => {
 
 	}
 
+	const players = app.players.here;
+	for ( let i = 0; i < players.length; i ++ )
+		onNewPlayer( players[ i ] );
+
+	if ( players.length === 2 )
+		startTimer = app.setTimeout( start, 1000 );
+
 } );
+
+app.addEventListener( "playerLeave", ( { player } ) => {
+
+	// Kill the leaver's bike
+	if ( player.bike ) {
+
+		player.bike.kill();
+		bikes.splice( bikes.indexOf( player.bike ), 1 );
+		player.bike = undefined;
+
+		// Leaver was the last opponent; award points to the winner and freeze the game
+		if ( bikes.length === 1 ) {
+
+			const winner = bikes[ 0 ].owner;
+
+			++ winner.score;
+
+			winner.bike.x = winner.bike.x;
+			winner.bike.y = winner.bike.y;
+
+			if ( ticker ) ticker = ticker.clear();
+
+		// Leaver was the winner; cancel ticker if going and start the next round if we can
+
+		} else if ( bikes.length === 0 && ticker ) ticker = ticker.clear();
+
+	}
+
+	// Between rounds
+	if ( ! ticker ) {
+
+		if ( startTimer ) startTimer = startTimer.clear();
+
+		if ( app.players.here.length >= 2 )
+			startTimer = app.setTimeout( start, 1000 );
+
+	}
+
+	if ( WebCraft.isBrowser ) player.leaderboardRow.remove();
+
+} );
+
+/////////////////////////////////////////////////
+///// Leaderboard
+/////////////////////////////////////////////////
+
+function addPlayerToLeaderboard( player ) {
+
+	const container = document.createElement( "div" );
+	container.classList.add( "row" );
+	container.style.color = player.color.hex;
+	document.querySelector( ".leaderboard" ).appendChild( container );
+
+	const name = document.createElement( "span" );
+	name.classList.add( "player" );
+	name.textContent = ( player === app.localPlayer ? "►" : "" ) + player.color.name;
+	container.appendChild( name );
+
+	const score = document.createElement( "span" );
+	score.classList.add( "score" );
+	score.textContent = player.score;
+	container.appendChild( score );
+
+	player.scoreSpan = score;
+	player.leaderboardRow = container;
+
+}
 
 /////////////////////////////////////////////////
 ///// Player Actions
@@ -352,12 +359,13 @@ app.addEventListener( "up down left right", bikeEvent );
 function bikeEvent( { type, player } ) {
 
 	const bike = player.bike;
+	const direction = type.replace( type[ 0 ], type[ 0 ].toUpperCase() );
 
 	if ( ! bike ) return;
 
-	if ( Math.abs( ( ( bike.oldFacing + Math.PI ) % ( Math.PI * 2 ) ) - direction[ type ] ) < 1e-6 || bike.facing !== bike.oldFacing )
+	if ( Math.abs( ( ( bike.oldFacing + Math.PI ) % ( Math.PI * 2 ) ) - Direction[ direction ] ) < 1e-6 || bike.facing !== bike.oldFacing )
 		return;
 
-	bike.facing = direction[ type ];
+	bike.facing = Direction[ direction ];
 
 }
